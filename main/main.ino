@@ -1,18 +1,31 @@
 //WiFi
-#include <ESP8266WiFi.h>         
+#include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include "WiFiManager.h"         
+#include "WiFiManager.h"
 #include <ESP8266mDNS.h>
 
 //MQTT
-//#include "Adafruit_MQTT.h"
-//#include "Adafruit_MQTT_Client.h"
 #include <PubSubClient.h>
 
-const char* mqtt_server = "192.168.43.110";
+//NTP
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+WiFiUDP ntpUDP;
+
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 0, 60000);
+
+//const char* mqtt_server = "192.168.43.110";
+const char *mqtt_server = "m12.cloudmqtt.com";
+const int mqtt_port = 10745;
+const char *mqtt_user = "igutgmoo";
+const char *mqtt_pass = "ZRSNzyn0bG6e";
+const char *mqtt_client_name = "esp_d1_mini"; // Client connections cant have the same connection name
+
 
 WiFiClient espClient;
+
 PubSubClient mqttclient(espClient);
 
 long lastMsg = 0;
@@ -22,15 +35,15 @@ int value = 0;
 /* Weather Logic */
 
 #include <ArduinoJson.h>
-#include <ESP8266WiFi.h>  
+#include <ESP8266WiFi.h>
 
 //open weather map api key
-String apiKey= "e107d5d4f634aff19140e50271c39380";
+String apiKey = "e107d5d4f634aff19140e50271c39380";
 
 //the city you want the weather for
-String location= "Panaji, IN";
+String location = "Panaji, IN";
 
-char weather_server[] = "api.openweathermap.org";    
+char weather_server[] = "api.openweathermap.org";
 
 /****************************** */
 
@@ -93,9 +106,9 @@ void handleRoot() {
   </html>
   )##";
 
-  snprintf ( temp, 500, html, 
-    hr, min % 60, sec % 60
-  );
+  snprintf ( temp, 500, html,
+             hr, min % 60, sec % 60
+           );
   server.send ( 200, "text/html", temp );
 }
 
@@ -129,36 +142,36 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 void setup_wifi()
 {
 
-WiFiManager wifiManager;
+  WiFiManager wifiManager;
   //reset settings - for testing
   //wifiManager.resetSettings();
 
   wifiManager.setAPCallback(configModeCallback);
 
-  if(!wifiManager.autoConnect("Esp8266APP")) {
+  if (!wifiManager.autoConnect("Esp8266APP")) {
     Serial.println("failed to connect and hit timeout");
     //reset and try again, or maybe put it to deep sleep
     ESP.reset();
     delay(1000);
-  } 
+  }
 
   //if you get here you have connected to the WiFi
   Serial.println("connected... :)");
-  
+
   // Start the server
   server.on ( "/", handleRoot );
   server.on ( "/inline", []() {
-  server.send ( 200, "text/plain", "this works as well" );
+    server.send ( 200, "text/plain", "this works as well" );
   } );
   server.onNotFound ( handleNotFound );
 
   server.begin();
   MDNS.addService("http", "tcp", 80);
   Serial.println ( "HTTP server started" );
-  
+
   // Print the IP address
   Serial.println(WiFi.localIP());
-  
+
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -171,13 +184,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
   city = (char*) malloc(length + 1);
   {
     int i;
-  for (i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-    city[i] = (char)payload[i];
+    for (i = 0; i < length; i++) {
+      Serial.print((char)payload[i]);
+      city[i] = (char)payload[i];
+    }
+    city[i] = '\0';
   }
-  city[i] = '\0';
-  }
-  
+
 
   location = (char*) city;
 
@@ -195,11 +208,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   readdht21();
   getWeather();
   //delay(5000);
-  
 
-    Serial.print("Publish message: ");
-    
-    mqttclient.publish("outTopic", "Done");
+
+  Serial.print("Publish message: ");
+
+  mqttclient.publish("outTopic", "Done");
 
 }
 
@@ -209,7 +222,8 @@ void reconnect() {
     mqttclient.disconnect();
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (mqttclient.connect("ESP8266Client")) {
+    if (mqttclient.connect(mqtt_client_name, mqtt_user, mqtt_pass)) 
+    {
       Serial.println("connected");
       // Once connected, publish an announcement...
       mqttclient.publish("outTopic", "hello world");
@@ -238,7 +252,7 @@ void printDiffString(String now, String later, String weatherType) {
   else {
     if (indexNow == -1 && indexLater != -1) {
       Serial.println("It is going to be sunny later! Predicted " + later);
-    
+
     }
   }
 }
@@ -270,8 +284,8 @@ void getWeather() {
     Serial.println("connected to server");
     // Make a HTTP request:
     espClient.print("GET /data/2.5/forecast?");
-    espClient.print("q="+location);
-    espClient.print("&appid="+apiKey);
+    espClient.print("q=" + location);
+    espClient.print("&appid=" + apiKey);
     espClient.print("&cnt=3");
     espClient.println("&units=metric");
     espClient.println("Host: api.openweathermap.org");
@@ -286,55 +300,57 @@ void getWeather() {
 
   while (espClient.connected()) {
     line = espClient.readStringUntil('\n');
-    Serial.println(line);
-    Serial.println("parsingValues"); 
+    display_logic(line);
+    //Serial.println(line);
+/*    
+    Serial.println("parsingValues");
 
-   DynamicJsonBuffer  jsonBuffer(2000);
- 
-   JsonObject& root = jsonBuffer.parseObject(line);
+    DynamicJsonBuffer  jsonBuffer(2000);
 
-  // Test if parsing succeeds.
-   if (!root.success()) {
-    Serial.println("parseObject() failed");
-   }
+    JsonObject& root = jsonBuffer.parseObject(line);
 
-  JsonArray& list = root["list"];
-  JsonObject& now = list[0];
-  JsonObject& later = list[1];
-  
-  String city = root["city"]["name"];
-  float tempNow = now["main"]["temp"];
-  float humidityNow = now["main"]["humidity"];
-  String weatherNow = now["weather"][0]["description"];
-  
-  float tempLater = later["main"]["temp"];
-  float humidityLater = later["main"]["humidity"];
-  String weatherLater = later["weather"][0]["description"];
-  
-  Serial.println(city);
-  Serial.println(tempNow);
-  Serial.println(humidityNow);
-  Serial.println(weatherNow);
-  
-  Serial.println(tempLater);
-  Serial.println(humidityLater);
-  Serial.println(weatherLater);
+    // Test if parsing succeeds.
+    if (!root.success()) {
+      Serial.println("parseObject() failed");
+    }
 
-  printDiffFloat(tempNow, tempLater, "temperature", "*C");
-  printDiffString(weatherNow, weatherLater, "rain");
-  printDiffString(weatherNow, weatherLater, "snow");
-  printDiffString(weatherNow, weatherLater, "hail");
-  printDiffString(weatherNow, weatherLater, "clear");
-  printDiffFloat(humidityNow, humidityLater, "humidity", "%");
-  Serial.println();
+    JsonArray& list = root["list"];
+    JsonObject& now = list[0];
+    JsonObject& later = list[1];
 
+    String city = root["city"]["name"];
+    float tempNow = now["main"]["temp"];
+    float humidityNow = now["main"]["humidity"];
+    String weatherNow = now["weather"][0]["description"];
+
+    float tempLater = later["main"]["temp"];
+    float humidityLater = later["main"]["humidity"];
+    String weatherLater = later["weather"][0]["description"];
+
+    Serial.println(city);
+    Serial.println(tempNow);
+    Serial.println(humidityNow);
+    Serial.println(weatherNow);
+
+    Serial.println(tempLater);
+    Serial.println(humidityLater);
+    Serial.println(weatherLater);
+
+    printDiffFloat(tempNow, tempLater, "temperature", "*C");
+    printDiffString(weatherNow, weatherLater, "rain");
+    printDiffString(weatherNow, weatherLater, "snow");
+    printDiffString(weatherNow, weatherLater, "hail");
+    printDiffString(weatherNow, weatherLater, "clear");
+    printDiffFloat(humidityNow, humidityLater, "humidity", "%");
+    Serial.println();
+    */
   }
 }
 
 
 void setup_mqttclient()
 {
-  mqttclient.setServer(mqtt_server, 1883);
+  mqttclient.setServer(mqtt_server, mqtt_port);
   mqttclient.setCallback(callback);
 }
 
@@ -376,39 +392,45 @@ void readdht21() {
 
 
 void setup() {
-    
-  //pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+
+  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
   Serial.begin(9600);
-  //setup_wifi();
+  setup_wifi();
   display_setup();
   Serial.println("Abhijeet is here");
-  //setup_mqttclient();
+  setup_mqttclient();
+  timeClient.begin();
   //dht.begin();
   //dht21reader.attach(60*60, readdht21);
-  delay(2000);
-  display_logic();
-
+  //delay(2000);
+  //display_logic();
+  //delay(2000);
 }
 
 void loop() {
   server.handleClient();
   yield();
 
-   if (!mqttclient.connected()) {
+  if (!mqttclient.connected()) {
     reconnect();
   }
   mqttclient.loop();
- 
-
-/*
-  long now = millis();
-  if (now - lastMsg > 2000) {
-    lastMsg = now;
-    ++value;
-    snprintf (msg, 75, "hello world #%ld", value);
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("outTopic", msg);
+  timeClient.update();
+  if(timeClient.getSeconds() == 0) {
+    Serial.print(timeClient.getHours());
+    Serial.print(":");
+    Serial.println(timeClient.getMinutes());
   }
+
+  /*
+    long now = millis();
+    if (now - lastMsg > 2000) {
+      lastMsg = now;
+      ++value;
+      snprintf (msg, 75, "hello world #%ld", value);
+      Serial.print("Publish message: ");
+      Serial.println(msg);
+      client.publish("outTopic", msg);
+    }
   */
 }

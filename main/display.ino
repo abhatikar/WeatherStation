@@ -36,122 +36,172 @@ void display_setup(void)
   Serial.println("setup display done");
 }
 
-void display_logic()
+void display_logic(String weatherData)
 {
 //  showPartialUpdate();
-	showFontCallback();
-  delay(DEMO_DELAY * 1000);
+	showFontCallback(weatherData);
+  //delay(DEMO_DELAY * 1000);
 }
 
 #if !defined(__AVR)
 
-void showFontCallback()
+void showFontCallback(String weatherData)
 {
-  const char* city = "Dublin,IE";
-  const char* sunrise = "SunRise:7.28am";
-  const char* sunset = "SunSet:7.28pm";
-  const char* cond = "MostlyClear";
-  const char* prec = "Humdity:90%";
-  const char* TempL = "Low:10*C";
-  const char* TempH = "High:20*C";
-  const char* date = "20 Dec 2018";
-    
-  const GFXfont* f = &FreeSansBoldOblique9pt7b;
-    
-  uint16_t box_x = 10;
-  uint16_t box_y = 15;
-  uint16_t box_w = 150;
-  uint16_t box_h = 22;
-  uint16_t cursor_y = box_y + box_h - 6;
-  
-  display.fillScreen(GxEPD_WHITE);
-  display.setTextColor(GxEPD_BLACK);
-  f = &FreeSansBoldOblique9pt7b;
-  display.setFont(f);
-  display.setRotation(3);
-  
-  display.fillRect(0, 0, box_w, box_h, GxEPD_BLACK);
-  display.setTextColor(GxEPD_WHITE);
-  display.setCursor(2, 13);
-  display.print("Weather Station   ");
-  
-  f = &FreeSansOblique9pt7b;
-  display.setFont(f);
-  display.setTextColor(GxEPD_BLACK);
-  display.setCursor(150, 15);
-  display.println(date);
-  
-  display.println();
-  f = &FreeSansBoldOblique9pt7b;
-  display.setFont(f);
-  
-  display.setTextColor(GxEPD_BLACK);
-  display.setCursor(0, 38);
-  display.println(city);
-  
-  display.println(sunrise);
-  display.println(sunset);
-  
-  display.println(cond);
-  display.println(prec);
-  display.println(TempL);
-  display.println(TempH);
-  //display.drawBitmap(BitmapWaveshare_black, 150, 30, 110, 80, GxEPD_WHITE);
-  display.setCursor(135, 125);
-  display.println("RoomTemp");
-  display.setCursor(135, 145);
-  display.println(TempL);
-  display.setCursor(135, 165);
-  display.println(prec);
-  //display.update();
-  //delay(2000);
+
+	const char* date = "20 Dec 2018";
+	const unsigned char *bitmap;
+
+	DynamicJsonBuffer  jsonBuffer(2000);
+
+	JsonObject& root = jsonBuffer.parseObject(weatherData);
+
+	// Test if parsing succeeds.
+	if (!root.success()) {
+		Serial.println("parseObject() failed");
+		return;
+	}
+
+	JsonArray& list = root["list"];
+	JsonObject& now = list[0];
+	JsonObject& later = list[1];
+
+	String city = root["city"]["name"];
+	float tempNow = now["main"]["temp"];
+	float humidityNow = now["main"]["humidity"];
+	String weatherNow = now["weather"][0]["description"];
+
+	Serial.println(city);
+	Serial.println(tempNow);
+	Serial.println(humidityNow);
+	Serial.println(weatherNow);
+
+	const GFXfont* f = &FreeSansBoldOblique9pt7b;
+
+	uint16_t box_x = 10;
+	uint16_t box_y = 15;
+	uint16_t box_w = 150;
+	uint16_t box_h = 22;
+	uint16_t cursor_y = box_y + box_h - 6;
+
+	display.fillScreen(GxEPD_WHITE);
+	display.setTextColor(GxEPD_BLACK);
+	f = &FreeSansBoldOblique9pt7b;
+	display.setFont(f);
+	display.setRotation(3);
+
+	display.fillRect(0, 0, box_w, box_h, GxEPD_BLACK);
+	display.setTextColor(GxEPD_WHITE);
+	display.setCursor(2, 13);
+	display.print("Weather Station   ");
+
+	f = &FreeSansOblique9pt7b;
+	display.setFont(f);
+	display.setTextColor(GxEPD_BLACK);
+	display.setCursor(150, 15);
+	display.println(date);
+
+	display.println();
+	f = &FreeSansBoldOblique9pt7b;
+	display.setFont(f);
+
+	display.setTextColor(GxEPD_BLACK);
+	display.setCursor(0, 38);
+	display.println(city);
+
+	//display.println(sunrise);
+	//display.println(sunset);
+	Serial.print("Temp:");
+	Serial.print(tempNow);
+	Serial.println("*C");
+	Serial.print("Humidity:");
+	Serial.print(humidityNow);
+	Serial.println("%");
+	Serial.println(weatherNow);
+
+	display.println(weatherNow);
+	display.print("Temp:");
+	display.print(tempNow);
+	display.println("*C");
+	display.print("Humidity:");
+	display.print(humidityNow);
+	display.println("%");
+	display.setCursor(135, 125);
+	display.println("RoomTemp");
+	display.setCursor(135, 145);
+	display.println(tempNow);
+	display.setCursor(135, 165);
+	display.println(humidityNow);
+
+	if(weatherNow == "clear sky")
+		bitmap = bm_moon;
+
+	if((weatherNow == "few clouds") || (weatherNow == "scattered clouds") || (weatherNow == "broken clouds"))
+		bitmap = bm_cloud;
+
+	if (weatherNow.indexOf("rain") > 0)
+		bitmap = bm_rain;
+
+	if(weatherNow.indexOf("shower rain") > 0)
+		bitmap = bm_lightrain;
+
+	if(weatherNow.indexOf("thunderstorm") > 0)
+		bitmap = bm_thunder;
+
+	if(weatherNow.indexOf("snow") > 0)
+		bitmap = bm_snow;
+
+	if(weatherNow == "mist")
+		bitmap = bm_clear;
+
+	display.drawBitmap(bitmap, 150, 30, 110, 80, GxEPD_WHITE);
+	display.update();
+
+
 #if 0
-  display.drawBitmap(bm_wind, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_thunder, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_sunny, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_snow, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_rain, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_pl_night, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-  
-  display.drawBitmap(bm_pl_day, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_moon, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-
-  display.drawBitmap(bm_lightrain, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
+	//  display.drawBitmap(bm_wind, 150, 30, 110, 80, GxEPD_WHITE);
+	//  display.update();
+	//
+	//  //display.drawBitmap(bm_thunder, 150, 30, 110, 80, GxEPD_WHITE);
+	//  //display.update();
+	//
+	//  display.drawBitmap(bm_sunny, 150, 30, 110, 80, GxEPD_WHITE);
+	//  display.update();
+	//
+	//  //display.drawBitmap(bm_snow, 150, 30, 110, 80, GxEPD_WHITE);
+	//  //display.update();
+	//
+	//  //display.drawBitmap(bm_rain, 150, 30, 110, 80, GxEPD_WHITE);
+	//  //display.update();
+	//
+	//  display.drawBitmap(bm_pl_night, 150, 30, 110, 80, GxEPD_WHITE);
+	//  display.update();
+	//  
+	//  display.drawBitmap(bm_pl_day, 150, 30, 110, 80, GxEPD_WHITE);
+	//  display.update();
+	//
+	//  display.drawBitmap(bm_moon, 150, 30, 110, 80, GxEPD_WHITE);
+	//  display.update();
+	//
+	//  //display.drawBitmap(bm_lightrain, 150, 30, 110, 80, GxEPD_WHITE);
+	//  //display.update();
 #endif
-  display.drawBitmap(bm_cloud, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
+	//display.drawBitmap(bm_cloud, 150, 30, 110, 80, GxEPD_WHITE);
+	//display.update();
 
-  display.drawBitmap(bm_clear, 150, 30, 110, 80, GxEPD_WHITE);
-  display.update();
-  
- 
-  //display.drawBitmap(bm_snow, 150, 30, 110, 80, GxEPD_BLACK);
-  //display.update();
-  //display.drawBitmap(bm_cloud, 150, 30, 110, 80, GxEPD_BLACK);
-  //display.update();
-  //display.drawBitmap(bm_sun, 150, 30, 110, 80, GxEPD_BLACK);
-  //display.update();
-  //delay(2000);
-  // partial update to full screen to preset for partial update of box window
-  // (this avoids strange background effects)
-  //display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
+	//display.drawBitmap(bm_clear, 150, 30, 110, 80, GxEPD_WHITE);
+	//display.update();
+
+
+	//display.drawBitmap(bm_snow, 150, 30, 110, 80, GxEPD_BLACK);
+	//display.update();
+	//display.drawBitmap(bm_cloud, 150, 30, 110, 80, GxEPD_BLACK);
+	//display.update();
+	//display.drawBitmap(bm_sun, 150, 30, 110, 80, GxEPD_BLACK);
+	//display.update();
+	//delay(2000);
+	// partial update to full screen to preset for partial update of box window
+	// (this avoids strange background effects)
+	//display.updateWindow(0, 0, GxEPD_WIDTH, GxEPD_HEIGHT, false);
 }
-
-
 
 #endif
